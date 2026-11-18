@@ -1,4 +1,4 @@
-'use client'
+﻿'use client'
 
 import ReactMarkdown from 'react-markdown'
 import remarkCjkFriendly from 'remark-cjk-friendly'
@@ -39,6 +39,8 @@ import swift from 'react-syntax-highlighter/dist/esm/languages/prism/swift'
 import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx'
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
+
+import { OpenNotebookBlock } from '@/components/learning/blocks/OpenNotebookBlock'
 
 import type {ExtraProps} from 'react-markdown'
 import type {ComponentProps, ElementType} from 'react'
@@ -89,24 +91,31 @@ export function MarkdownRenderer({ children, components = {}}: { children: React
             td: ({ children }) => <td className="border border-border px-3 py-2">{children}</td>,
             code: ({ children, className }) => {
               const match = /language-(\w+)/.exec(className || '')
-              const isBlock = match || String(children).includes('\n')
+              const language = match?.[1]
+              const raw = String(children)
+
+              if (language === 'open-notebook') {
+                return <OpenNotebookBlock raw={raw} />
+              }
+
+              const isBlock = match || raw.includes('\\n')
               return isBlock ? (
                 <SyntaxHighlighter
-                  language={match ? match[1] : 'text'}
+                  language={language ?? 'text'}
                   style={isDark ? darkTheme : lightTheme}
                   PreTag="div"
                   className="text-sm border border-border max-w-full overflow-x-auto"
                 >
-                  {String(children)}
+                  {raw}
                 </SyntaxHighlighter>
               ) : (
                 <code className="bg-border rounded px-1 py-0.5">{children}</code>
               )
-            },
-          }, ...components}}
+            },          }, ...components}}
         >
           {String(children)}
         </ReactMarkdown>
       </div>
   )
 }
+
