@@ -1,11 +1,14 @@
 ﻿'use client'
 
+import { useMemo } from 'react'
 import ReactMarkdown from 'react-markdown'
 import remarkCjkFriendly from 'remark-cjk-friendly'
 import remarkGfm from 'remark-gfm'
 import remarkMath from 'remark-math'
 import rehypeKatex from 'rehype-katex'
 
+import { OpenNotebookBlock } from '@/components/learning/blocks/OpenNotebookBlock'
+import { parseOpenNotebookBlock } from '@/components/learning/blocks/types'
 import { useThemeStore } from '@/lib/stores/theme-store'
 import { KATEX_OPTIONS } from '@/lib/utils/katex-options'
 import { oneDark as darkTheme } from 'react-syntax-highlighter/dist/esm/styles/prism'
@@ -40,15 +43,35 @@ import tsx from 'react-syntax-highlighter/dist/esm/languages/prism/tsx'
 import typescript from 'react-syntax-highlighter/dist/esm/languages/prism/typescript'
 import yaml from 'react-syntax-highlighter/dist/esm/languages/prism/yaml'
 
-import { OpenNotebookBlock } from '@/components/learning/blocks/OpenNotebookBlock'
-
-import type {ExtraProps} from 'react-markdown'
-import type {ComponentProps, ElementType} from 'react'
+import type { ExtraProps } from 'react-markdown'
+import type { ComponentProps, ElementType } from 'react'
 
 const LANGUAGES = {
-  bash, c, cpp, csharp, css, diff, docker, go, java, javascript, json, jsx,
-  kotlin, markdown, markup, php, python, r, ruby, rust, sql, swift, tsx,
-  typescript, yaml,
+  bash,
+  c,
+  cpp,
+  csharp,
+  css,
+  diff,
+  docker,
+  go,
+  java,
+  javascript,
+  json,
+  jsx,
+  kotlin,
+  markdown,
+  markup,
+  php,
+  python,
+  r,
+  ruby,
+  rust,
+  sql,
+  swift,
+  tsx,
+  typescript,
+  yaml,
 }
 for (const [name, language] of Object.entries(LANGUAGES)) {
   SyntaxHighlighter.registerLanguage(name, language)
@@ -58,17 +81,51 @@ type Components = {
   [Key in Extract<ElementType, string>]?: ElementType<ComponentProps<Key> & ExtraProps>
 }
 
-export function MarkdownRenderer({ children, components = {}}: { children: React.ReactNode , components?: Components }) {
+function decodeBasicHtmlEntities(text: string) {
+  return text
+    .replaceAll('&#x20;', ' ')
+    .replaceAll('&#32;', ' ')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#34;', '"')
+    .replaceAll('&amp;', '&')
+    .replaceAll('&#38;', '&')
+}
 
+function normalizeInteractiveBlockMarkdown(markdownText: string) {
+  // Some LLMs emit backslash-newline sequences ("\\\n") inside fenced blocks.
+  // Others (or some copy/paste paths) HTML-encode spaces as `&#x20;`.
+  // Normalize both so ReactMarkdown recognizes the fence and JSON.parse can run.
+  return markdownText.replace(
+    /```(open-notebook|json)\\?\r?\n([\s\S]*?)\r?\n```\\?/g,
+    (_match, lang: string, body: string) => {
+      const cleanedBody = decodeBasicHtmlEntities(body).replace(/\\\r?\n/g, '\n')
+      return `\`\`\`${lang}\n${cleanedBody}\n\`\`\``
+    }
+  )
+}
+
+export function MarkdownRenderer({
+  children,
+  components = {},
+}: {
+  children: React.ReactNode
+  components?: Components
+}) {
   const { getEffectiveTheme } = useThemeStore()
   const isDark = getEffectiveTheme() === 'dark'
 
+  const markdownText = useMemo(
+    () => normalizeInteractiveBlockMarkdown(String(children)),
+    [children]
+  )
+
   return (
     <div className="prose prose-sm prose-neutral dark:prose-invert max-w-none break-words prose-headings:font-semibold prose-a:text-primary prose-a:break-all prose-code:before:content-none prose-code:after:content-none prose-pre:p-0 prose-pre:bg-transparent prose-p:mb-4 prose-p:leading-7 prose-li:mb-2">
-        <ReactMarkdown
-          remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkMath]}
-          rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
-          components={{...{
+      <ReactMarkdown
+        remarkPlugins={[remarkGfm, remarkCjkFriendly, remarkMath]}
+        rehypePlugins={[[rehypeKatex, KATEX_OPTIONS]]}
+        components={{
+          ...{
             p: ({ children }) => <p className="mb-4">{children}</p>,
             h1: ({ children }) => <h1 className="mb-4 mt-6">{children}</h1>,
             h2: ({ children }) => <h2 className="mb-3 mt-5">{children}</h2>,
@@ -87,10 +144,12 @@ export function MarkdownRenderer({ children, components = {}}: { children: React
             thead: ({ children }) => <thead className="bg-muted">{children}</thead>,
             tbody: ({ children }) => <tbody>{children}</tbody>,
             tr: ({ children }) => <tr className="border-b border-border">{children}</tr>,
-            th: ({ children }) => <th className="border border-border px-3 py-2 text-left font-semibold">{children}</th>,
+            th: ({ children }) => (
+              <th className="border border-border px-3 py-2 text-left font-semibold">{children}</th>
+            ),
             td: ({ children }) => <td className="border border-border px-3 py-2">{children}</td>,
             code: ({ children, className }) => {
-              const match = /language-(\w+)/.exec(className || '')
+              const match = /language-([\w-]+)/.exec(className || '')
               const language = match?.[1]
               const raw = String(children)
 
@@ -98,7 +157,17 @@ export function MarkdownRenderer({ children, components = {}}: { children: React
                 return <OpenNotebookBlock raw={raw} />
               }
 
-              const isBlock = match || raw.includes('\\n')
+              // Some models ignore instructions and emit ` ```json ` instead of
+              // ` ```open-notebook `. If the JSON matches our block schema,
+              // render it anyway; otherwise keep showing it as a normal code block.
+              if (language === 'json') {
+                const parsed = parseOpenNotebookBlock(raw)
+                if (parsed.ok) {
+                  return <OpenNotebookBlock raw={raw} />
+                }
+              }
+
+              const isBlock = Boolean(match) || raw.includes('\n')
               return isBlock ? (
                 <SyntaxHighlighter
                   language={language ?? 'text'}
@@ -111,11 +180,13 @@ export function MarkdownRenderer({ children, components = {}}: { children: React
               ) : (
                 <code className="bg-border rounded px-1 py-0.5">{children}</code>
               )
-            },          }, ...components}}
-        >
-          {String(children)}
-        </ReactMarkdown>
-      </div>
+            },
+          },
+          ...components,
+        }}
+      >
+        {markdownText}
+      </ReactMarkdown>
+    </div>
   )
 }
-

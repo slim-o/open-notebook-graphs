@@ -12,6 +12,7 @@ const normalDistributionBlockSchema = z.object({
     xMin: z.number().optional(),
     xMax: z.number().optional(),
     samples: z.number().int().min(50).max(800).optional(),
+    showGrid: z.boolean().default(true),
   }),
 })
 
@@ -40,6 +41,8 @@ const calculusPlotBlockSchema = z.object({
     showIntegral: z.boolean().default(false),
     a: z.number().default(-1),
     b: z.number().default(1),
+
+    showGrid: z.boolean().default(true),
   }),
 })
 
@@ -50,13 +53,25 @@ export const openNotebookBlockSchema = z.discriminatedUnion('type', [
 
 export type OpenNotebookBlock = z.infer<typeof openNotebookBlockSchema>
 
-export function parseOpenNotebookBlock(raw: string):
-  | { ok: true; block: OpenNotebookBlock }
-  | { ok: false; error: string } {
+function normalizeBlockJson(raw: string) {
+  return raw
+    .replace(/\\\r?\n/g, '\n')
+    .replaceAll('&#x20;', ' ')
+    .replaceAll('&#32;', ' ')
+    .replaceAll('&quot;', '"')
+    .replaceAll('&#34;', '"')
+    .replaceAll('&amp;', '&')
+    .replaceAll('&#38;', '&')
+}
+
+export function parseOpenNotebookBlock(
+  raw: string
+): { ok: true; block: OpenNotebookBlock } | { ok: false; error: string } {
   const trimmed = raw.trim()
+  const normalized = normalizeBlockJson(trimmed)
 
   try {
-    const json = JSON.parse(trimmed)
+    const json = JSON.parse(normalized)
     const parsed = openNotebookBlockSchema.safeParse(json)
     if (!parsed.success) {
       return { ok: false, error: parsed.error.message }
@@ -65,7 +80,7 @@ export function parseOpenNotebookBlock(raw: string):
   } catch (err) {
     return {
       ok: false,
-      error: err instanceof Error ? err.message : 'Unknown error'
+      error: err instanceof Error ? err.message : 'Unknown error',
     }
   }
 }

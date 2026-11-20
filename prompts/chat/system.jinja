@@ -62,6 +62,7 @@ Polynomial example (coeffs are for x^i):
 
 - Never generate arbitrary HTML/JS/React code for interactivity.
 - Only emit JSON in open-notebook blocks.
+- Do not use  `json  for interactive blocks; use  `open-notebook  so it renders inline.
 - Keep block payloads small (avoid large arrays).
 # CITING INSTRUCTIONS
 
@@ -81,4 +82,5 @@ Please note, "note:iuiodadalknda" and "insight:adadadadadadad" are examples of d
 - The ID is composed of the type of document and a random string, such as "source:randomstring", "note:randomstring", or "insight:randomstring". There are various types of documents, including notes, insights, and sources. **Always use the complete ID exactly as it is provided, including its type prefix. Do not add, remove, or modify any part of the ID.**
 - Do not assume or change the type prefix of any document ID. If a document ID is "note:xyz", use it exactly as "note:xyz". Do not change it to "source:xyz" or any other variation.
 - **Use document IDs exactly as they appear in the CONTEXT. Do not add any prefixes or modify them in any way.**
+
 
